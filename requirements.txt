@@ -7,6 +7,8 @@
     gliner
     torch
     transformers
+# chunking:
+    semantic_chunkers
 # misc:
     python-dotenv==1.0.1
 # LLM:
