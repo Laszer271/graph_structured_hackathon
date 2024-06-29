@@ -1,7 +1,16 @@
 neo4j==5.22.0
 python-dotenv==1.0.1
 openai==1.35.7
+
 gliner
 torch
 transformers
 semantic_chunkers
+
+# frontend:
+streamlit==1.36.0
+
+# NER:
+gliner
+torch
+transformers
