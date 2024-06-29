@@ -4,3 +4,4 @@ openai==1.35.7
 gliner
 torch
 transformers
+semantic_chunkers
