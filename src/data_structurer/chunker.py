@@ -24,7 +24,7 @@ class StatisticalChunk(Chunker):
         super().__init__(chunker)
 
     def chunk(self, sentence):
-        return self.chunker(docs=[sentence])
+        return self.chunker(docs=[sentence])[0]
 
     def pretty_print(self, chunks):
         self.chunker.print(chunks[0])

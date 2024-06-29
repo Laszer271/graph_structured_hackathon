@@ -8,7 +8,7 @@
     torch
     transformers
 # chunking:
-    semantic_chunkers
+    semantic-chunkers
 # misc:
     python-dotenv==1.0.1
 # LLM:

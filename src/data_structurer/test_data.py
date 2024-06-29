@@ -1,5 +1,5 @@
 arxiv = """
-verything is Connected: Graph Neural Networks
+everything is Connected: Graph Neural Networks
 Petar Veliˇckovi´c
 DeepMind / University of Cambridge
 In many ways, graphs are the main modality of data we receive from na-

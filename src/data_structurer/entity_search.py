@@ -65,9 +65,6 @@ class GLiNEREntitySearcher(EntitySearcher):
 
     def search_entities(self, input: str):
         entities = self.model.predict_entities(input, self.labels)
-        for entity in entities:
-            print(entity["text"], "=>", entity["label"])
-
         return entities
     
 

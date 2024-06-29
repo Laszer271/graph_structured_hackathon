@@ -1,4 +1,5 @@
 import os
+from tqdm import tqdm
 
 from semantic_router.encoders import OpenAIEncoder
 from semantic_chunkers import StatisticalChunker,ConsecutiveChunker
@@ -21,7 +22,8 @@ def chunk_text(text):
     #Statistical chunker test
     statistical_chunker = StatisticalChunk(chunker=s_chunker)
     statistical_chunks = statistical_chunker.chunk(text)
-    return statistical_chunks
+    chunks = [chunk.content for chunk in statistical_chunks]
+    return chunks
 
 def find_entities(text):
     gliner_searcher = GLiNEREntitySearcher()
@@ -37,28 +39,29 @@ if __name__ == '__main__':
 
     folder_dao = FolderDAO(uri=uri, password=password, username=username)
     document_dao = DocumentDAO(uri=uri, password=password, username=username)
-    chunk_dao = ChunkDAO(uri=uri, password=password, username=username, emb_processor=emb_processor)
+    chunk_dao = ChunkDAO(uri=uri, password=password, username=username, embeddings_processor=emb_processor)
     entity_dao = EntityDAO(uri=uri, password=password, username=username)
 
     document = DocumentSchema(path="test_data", name="arxiv.txt")
-    document_dao.create_document(document)
+    document_dao.add_document(document)
 
     chunks = chunk_text(arxiv)
     print(len(chunks))
     chunks = [ChunkSchema(id=i, text=chunk, chunk_nr=i) for i, chunk in enumerate(chunks)]
-    for chunk in chunks:
-        chunk_dao.create_chunk(chunk, document)
+    for chunk in tqdm(chunks):
+        chunk_dao.add_chunk(chunk)
         chunk_dao.connect_chunk_to_document(
-            chunk_id=chunk.id,
-            document_name=document.name,
-            document_path=document.path
+            chunk=chunk,
+            document=document
         )
 
         entities = find_entities(chunk.text)
         for entity in entities:
-            entity_dao.create_entity(EntitySchema(name=entity["word"], type=entity["entity"]), chunk)
+            entity = EntitySchema(name=entity["text"], type=entity["label"])
+            if len(entity.name) <= 2:
+                continue # Skip entities with less than 2 characters
+            entity_dao.add_entity(entity)
             entity_dao.connect_entity_to_chunk(
-                entity_name=entity["word"],
-                entity_type=entity["entity"],
-                chunk_id=chunk.id
+                entity,
+                chunk
             )

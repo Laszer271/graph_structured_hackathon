@@ -20,7 +20,13 @@ class FolderDAO(BaseDAO):
         super().__init__(uri, username, password)
 
     def _add_folder(self, tx, folder: FolderSchema):
-        tx.run("CREATE (a:Folder {name: $name, path: $path})", name=folder.name, path=folder.path)
+        tx.run(
+            """
+            MERGE (a:Folder {name: $name, path: $path})
+            ON CREATE SET a.name = $name, a.path = $path
+            """,
+            name=folder.name, path=folder.path
+        )
 
     def _get_folder_by_name(self, tx, name):
         result = tx.run("MATCH (a:Folder {name: $name}) RETURN a", name=name)
@@ -40,7 +46,7 @@ class FolderDAO(BaseDAO):
         tx.run("""
             MATCH (f:Folder {name: $folder_name, path: $folder_path})
             MATCH (pf:Folder {name: $parent_folder_name, path: $parent_folder_path})
-            CREATE (pf)-[:CONTAINS_FOLDER]->(f)
+            MERGE (pf)-[:CONTAINS_FOLDER]->(f)
             """, 
             folder_name=folder_name,
             folder_path=folder_path,
@@ -81,7 +87,13 @@ class DocumentDAO(BaseDAO):
         super().__init__(uri, username, password)
 
     def _add_document(self, tx, document: DocumentSchema):
-        tx.run("CREATE (a:Document {name: $name, path: $path})", name=document.name, path=document.path)
+        tx.run(
+            """
+            MERGE (a:Document {name: $name, path: $path})
+            ON CREATE SET a.name = $name, a.path = $path
+            """,
+            name=document.name, path=document.path
+        )
 
     def _get_document_by_name(self, tx, name):
         result = tx.run("MATCH (a:Document {name: $name}) RETURN a", name=name)
@@ -101,7 +113,7 @@ class DocumentDAO(BaseDAO):
         tx.run("""
             MATCH (d:Document {name: $document_name, path: $document_path})
             MATCH (f:Folder {name: $folder_name, path: $folder_path})
-            CREATE (f)-[:CONTAINS_DOCUMENT]->(d)
+            MERGE (f)-[:CONTAINS_DOCUMENT]->(d)
             """,
             document_name=document_name,
             document_path=document_path,
@@ -109,9 +121,9 @@ class DocumentDAO(BaseDAO):
             folder_path=folder_path
         )
 
-    def add_document(self, name, path):
+    def add_document(self, document: DocumentSchema):
         with self.driver.session() as session:
-            session.execute_write(self._add_document, DocumentSchema(name=name, path=path))
+            session.execute_write(self._add_document, document)
 
     def get_document_by_name(self, name):
         with self.driver.session() as session:
@@ -144,8 +156,19 @@ class ChunkDAO(BaseDAO):
         self.embeddings_processor = embeddings_processor
 
     def _add_chunk(self, tx, chunk: ChunkSchema):
-        tx.run("CREATE (a:Chunk {id: $id, text: $text, page: $page, chunk_nr: $chunk_nr})",
-               id=chunk.id, text=chunk.text, page=chunk.page, chunk_nr=chunk.chunk_nr)
+        if not chunk.embedding:
+            chunk.embedding = self.embeddings_processor.get_embedding(chunk.text)
+        tx.run(
+            """
+            MERGE (a:Chunk {id: $id})
+            ON CREATE SET a.text = $text, a.page = $page, a.chunk_nr = $chunk_nr, a.embedding = $embedding
+            """,
+            id=chunk.id,
+            text=chunk.text,
+            page=chunk.page,
+            chunk_nr=chunk.chunk_nr,
+            embedding=chunk.embedding
+        )
 
     def _get_chunk_by_id(self, tx, id):
         result = tx.run("MATCH (a:Chunk {id: $id}) RETURN a", id=id)
@@ -185,30 +208,30 @@ class ChunkDAO(BaseDAO):
             """, num_results=num_results, embedding=embedding)
         return [record["node"] for record in result]
     
-    def _connect_chunk_to_document(self, tx, chunk_id, document_name, document_path):
+    def _connect_chunk_to_document(self, tx, chunk: ChunkSchema, document: DocumentSchema):
         tx.run("""
             MATCH (c:Chunk {id: $chunk_id})
             MATCH (d:Document {name: $document_name, path: $document_path})
-            CREATE (c)-[:CONTAINS_CHUNK]->(d)
+            MERGE (c)-[:CONTAINS_CHUNK]->(d)
             """,
-            chunk_id=chunk_id,
-            document_name=document_name,
-            document_path=document_path
+            chunk_id=chunk.id,
+            document_name=document.name,
+            document_path=document.path
         )
 
     def _connect_chunk_to_document_by_chunk_nr(self, tx, chunk_nr, document_name, document_path):
         tx.run("""
             MATCH (c:Chunk)-[:PART_OF]->(d:Document {name: $document_name, path: $document_path})
-            CREATE (d)-[:CONTAINS_CHUNK]->(c)
+            MERGE (d)-[:CONTAINS_CHUNK]->(c)
             """,
             chunk_nr=chunk_nr,
             document_name=document_name,
             document_path=document_path
         )
 
-    def add_chunk(self, id, text, page, chunk_nr):
+    def add_chunk(self, chunk: ChunkSchema):
         with self.driver.session() as session:
-            session.execute_write(self._add_chunk, ChunkSchema(id=id, text=text, page=page, chunk_nr=chunk_nr))
+            session.execute_write(self._add_chunk, chunk)
 
     def get_chunk_by_id(self, id):
         with self.driver.session() as session:
@@ -235,9 +258,9 @@ class ChunkDAO(BaseDAO):
             result = session.execute_read(self._get_chunk_by_query, query, num_results)
             return [ChunkSchema(**record) for record in result]
         
-    def connect_chunk_to_document(self, chunk_id, document_name, document_path):
+    def connect_chunk_to_document(self, chunk: ChunkSchema, document: DocumentSchema):
         with self.driver.session() as session:
-            session.write_transaction(self._connect_chunk_to_document, chunk_id, document_name, document_path)
+            session.write_transaction(self._connect_chunk_to_document, chunk, document)
 
     def connect_chunk_to_document_by_chunk_nr(self, chunk_nr, document_name, document_path):
         with self.driver.session() as session:
@@ -249,7 +272,13 @@ class EntityDAO(BaseDAO):
         super().__init__(uri, username, password)
 
     def _add_entity(self, tx, entity: EntitySchema):
-        tx.run("CREATE (a:Entity {name: $name, type: $type})", name=entity.name, type=entity.type)
+        tx.run(
+            """
+            MERGE (a:Entity {name: $name, type: $type})
+            ON CREATE SET a.name = $name, a.type = $type
+            """,
+            name=entity.name, type=entity.type
+        )
 
     def _get_entity_by_name(self, tx, name):
         result = tx.run("MATCH (a:Entity {name: $name}) RETURN a", name=name)
@@ -264,20 +293,20 @@ class EntityDAO(BaseDAO):
                         name=name, type=type)
         return [record["a"] for record in result]
     
-    def _connect_entity_to_chunk(self, tx, entity_name, entity_type, chunk_id):
+    def _connect_entity_to_chunk(self, tx, entity: EntitySchema, chunk: ChunkSchema):
         tx.run("""
             MATCH (e:Entity {name: $entity_name, type: $entity_type})
             MATCH (c:Chunk {id: $chunk_id})
-            CREATE (c)-[:MENTIONS]->(e)
+            MERGE (c)-[:MENTIONS]->(e)
             """,
-            entity_name=entity_name,
-            entity_type=entity_type,
-            chunk_id=chunk_id
+            entity_name=entity.name,
+            entity_type=entity.type,
+            chunk_id=chunk.id
         )
 
-    def add_entity(self, name, type):
+    def add_entity(self, entity: EntitySchema):
         with self.driver.session() as session:
-            session.execute_write(self._add_entity, EntitySchema(name=name, type=type))
+            session.execute_write(self._add_entity, entity)
 
     def get_entity_by_name(self, name):
         with self.driver.session() as session:
@@ -294,6 +323,7 @@ class EntityDAO(BaseDAO):
             result = session.execute_read(self._get_entity_by_name_and_type, name, type)
             return [EntitySchema(**record) for record in result]
         
-    def connect_entity_to_chunk(self, entity_name, entity_type, chunk_id):
+    def connect_entity_to_chunk(self, entity: EntitySchema, chunk: ChunkSchema):
         with self.driver.session() as session:
-            session.write_transaction(self._connect_entity_to_chunk, entity_name, entity_type, chunk_id)
+            session.write_transaction(self._connect_entity_to_chunk, entity, chunk)
+
