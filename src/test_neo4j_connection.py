@@ -24,27 +24,26 @@ def get_person(tx, name):
     result = tx.run("MATCH (a:Person {name: $name}) RETURN a", name=name)
     return [record["a"] for record in result]
 
-# Connect to Neo4j AuraDB
-driver = GraphDatabase.driver(uri, auth=(username, password))
+if __name__ == '__main__':
+    # Connect to Neo4j AuraDB
+    driver = GraphDatabase.driver(uri, auth=(username, password))
 
-with driver.session() as session:
-    # Add a node
-    session.execute_write(add_person, "Alice")
+    with driver.session() as session:
+        # Add a node
+        session.execute_write(add_person, "Alice")
 
-    # Query the node
-    nodes = session.execute_read(get_person, "Alice")
-    for node in nodes:
-        print(node)
+        # Query the node
+        nodes = session.execute_read(get_person, "Alice")
+        for node in nodes:
+            print(node)
 
-    # Remove the added node
-    session.execute_write(remove_person, "Alice")
-    # should return empty
-    nodes = session.execute_read(get_person, "Alice")
-    print(len(nodes))
-    print('SUCCESSFULLY REMOVED NODE' if len(nodes) == 0 else 'FAILED TO REMOVE NODE')
+        # Remove the added node
+        session.execute_write(remove_person, "Alice")
+        # should return empty
+        nodes = session.execute_read(get_person, "Alice")
+        print(len(nodes))
+        print('SUCCESSFULLY REMOVED NODE' if len(nodes) == 0 else 'FAILED TO REMOVE NODE')
 
-
-
-# Close the driver connection
-driver.close()
+    # Close the driver connection
+    driver.close()
 
