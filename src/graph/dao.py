@@ -292,3 +292,8 @@ class EntityDAO(BaseDAO):
     def get_entity_by_name_and_type(self, name, type):
         with self.driver.session() as session:
             result = session.execute_read(self._get_entity_by_name_and_type, name, type)
+            return [EntitySchema(**record) for record in result]
+        
+    def connect_entity_to_chunk(self, entity_name, entity_type, chunk_id):
+        with self.driver.session() as session:
+            session.write_transaction(self._connect_entity_to_chunk, entity_name, entity_type, chunk_id)
