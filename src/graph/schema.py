@@ -1,4 +1,6 @@
 import os
+from typing import List
+
 from pydantic import BaseModel, Field
 
 
@@ -32,10 +34,13 @@ class FolderSchema(BaseModel):
     
 
 class ChunkSchema(BaseModel):
+    id: int = Field(None, description='Unique Chunk ID')
     text: str = Field(None, description='Text of the chunk')
     page: int = Field(None, description='Page number of the chunk')
     chunk_nr: int = Field(None, description='Chunk number (in the document)')
+    embedding: List[float] = Field(None, description='Embedding of the chunk')
 
 
 class EntitySchema(BaseModel):
-    pass
+    name: str = Field(None, description='Name of the entity')
+    type: str = Field(None, description='Type of the entity')
