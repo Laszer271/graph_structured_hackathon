@@ -1,4 +1,3 @@
-from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForTokenClassification,  PreTrainedTokenizer, PreTrainedTokenizerFast
 import torch
 from gliner import GLiNER
