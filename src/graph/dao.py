@@ -176,14 +176,14 @@ class ChunkDAO(BaseDAO):
     
     def _get_chunk_by_document(self, tx, document: DocumentSchema):
         result = tx.run("""
-            MATCH (a:Chunk)-[:PART_OF]->(d:Document {name: $name, path: $path})
+            MATCH (d:Document {name: $name, path: $path})-[:CONTAINS_CHUNK]->(a:Chunk)
             RETURN a
             """, name=document.name, path=document.path)
         return [record["a"] for record in result]
     
     def _get_chunk_by_document_and_page(self, tx, document: DocumentSchema, page):
         result = tx.run("""
-            MATCH (a:Chunk)-[:PART_OF]->(d:Document {name: $name, path: $path})
+            MATCH (d:Document {name: $name, path: $path})-[:CONTAINS_CHUNK]->(a:Chunk)
             WHERE a.page = $page
             RETURN a
             """, name=document.name, path=document.path, page=page)
@@ -191,7 +191,7 @@ class ChunkDAO(BaseDAO):
     
     def _get_chunk_by_document_and_chunk_nr(self, tx, document: DocumentSchema, chunk_nr):
         result = tx.run("""
-            MATCH (a:Chunk)-[:PART_OF]->(d:Document {name: $name, path: $path})
+            (d:Document {name: $name, path: $path})-[:CONTAINS_CHUNK]->(a:Chunk)
             WHERE a.chunk_nr = $chunk_nr
             RETURN a
             """, name=document.name, path=document.path, chunk_nr=chunk_nr)
@@ -212,21 +212,11 @@ class ChunkDAO(BaseDAO):
         tx.run("""
             MATCH (c:Chunk {id: $chunk_id})
             MATCH (d:Document {name: $document_name, path: $document_path})
-            MERGE (c)-[:CONTAINS_CHUNK]->(d)
+            MERGE (d)-[:CONTAINS_CHUNK]->(c)
             """,
             chunk_id=chunk.id,
             document_name=document.name,
             document_path=document.path
-        )
-
-    def _connect_chunk_to_document_by_chunk_nr(self, tx, chunk_nr, document_name, document_path):
-        tx.run("""
-            MATCH (c:Chunk)-[:PART_OF]->(d:Document {name: $document_name, path: $document_path})
-            MERGE (d)-[:CONTAINS_CHUNK]->(c)
-            """,
-            chunk_nr=chunk_nr,
-            document_name=document_name,
-            document_path=document_path
         )
 
     def add_chunk(self, chunk: ChunkSchema):
@@ -262,10 +252,6 @@ class ChunkDAO(BaseDAO):
         with self.driver.session() as session:
             session.write_transaction(self._connect_chunk_to_document, chunk, document)
 
-    def connect_chunk_to_document_by_chunk_nr(self, chunk_nr, document_name, document_path):
-        with self.driver.session() as session:
-            session.write_transaction(self._connect_chunk_to_document_by_chunk_nr, chunk_nr, document_name, document_path)
-        
 
 class EntityDAO(BaseDAO):
     def __init__(self, uri, username, password):

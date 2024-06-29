@@ -3,6 +3,12 @@
     pydantic==2.7.4
 # frontend:
     streamlit==1.36.0
+# NER:
+    gliner
+    torch
+    transformers
+# chunking:
+    semantic-chunkers
 # misc:
     python-dotenv==1.0.1
 # LLM:
