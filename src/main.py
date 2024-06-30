@@ -91,30 +91,44 @@ def main():
             st.session_state.window_history.append({"role": "user", "content": prompt})
 
         if prompt is not None:
-            # Connect to Neo4j AuraDB
-            driver = GraphDatabase.driver(uri, auth=(username, password))
+          
+            #TODO: Here should be router
+            where_to_go = chat_manager.router(st.session_state.window_history, prompt)
 
-            # semantic query
-            data = chunk_dao.get_chunk_by_query(prompt, num_results=3, depth=1)
-            nodes = [d['node1'] for d in data if d['node1'] is not None] +\
-                [d['node2'] for d in data if d['node2'] is not None]
-            nodes = list({node['elem_id']: node for node in nodes}.values())
-            relationships = data
-            nodes_str = "\n\n".join([f"--- Chunk {i} ---\n\n" + 
-                                     'Node type: ' + node.get('node_type', 'UnknownType') +
-                                     '\n\nText: ' + node.get('text', f"{node.get('type')}={node.get('name')}")
-                                     for i, node in enumerate(nodes)])
-            st.session_state['nodes'] = nodes
-            st.session_state['relationships'] = relationships
+            if where_to_go == "SEARCH":
+                # Connect to Neo4j AuraDB
+                driver = GraphDatabase.driver(uri, auth=(username, password))
+                # semantic query
+                data = chunk_dao.get_chunk_by_query(prompt, num_results=3, depth=1)
+                nodes = [d['node1'] for d in data if d['node1'] is not None] +\
+                    [d['node2'] for d in data if d['node2'] is not None]
+                nodes = list({node['elem_id']: node for node in nodes}.values())
+                relationships = data
+                nodes_str = "\n\n".join([f"--- Chunk {i} ---\n\n" + 
+                                        'Node type: ' + node.get('node_type', 'UnknownType') +
+                                        '\n\nText: ' + node.get('text', f"{node.get('type')}={node.get('name')}")
+                                        for i, node in enumerate(nodes)])
+                st.session_state['nodes'] = nodes
+                st.session_state['relationships'] = relationships
 
-            # Close the driver connection
-            driver.close()    # Display assistant response in chat message container
+                # Close the driver connection
+                driver.close()    # Display assistant response in chat message container
+
+            elif where_to_go == "CONVERSATION":
+                nodes_str = ""
+            elif where_to_go == "STOP":
+                nodes_str = ""
+            elif where_to_go == "ERROR":
+                nodes_str = ""
 
             with st.chat_message("assistant"):
                 # st.markdown(nodes_str)
 
-                stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt)
-                response = st.write_stream(stream)
+                stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt, context = nodes_str)
+                if (type(stream) == str):
+                    response = st.write(stream)
+                else:
+                    response = st.write_stream(stream)
 
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.session_state.window_history.append({"role": "user", "content": response})
