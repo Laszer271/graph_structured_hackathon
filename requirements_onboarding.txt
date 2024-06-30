@@ -13,3 +13,4 @@
     python-dotenv==1.0.1
 # LLM:
     openai==1.35.7
+tiktoken
