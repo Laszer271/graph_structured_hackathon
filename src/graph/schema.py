@@ -42,7 +42,21 @@ class ChunkSchema(BaseSchema):
     chunk_nr: int = Field(None, description='Chunk number (in the document)')
     embedding: List[float] = Field(None, description='Embedding of the chunk')
 
+    def __str__(self):
+        return (self.__class__.__name__ +
+            f'(id={self.id}, text={self.text}, page={self.page}, chunk_nr={self.chunk_nr})')
+    
+    def __repr__(self):
+        return self.__str__()
+
 
 class EntitySchema(BaseSchema):
     name: str = Field(None, description='Name of the entity')
     type: str = Field(None, description='Type of the entity')
+
+    def __str__(self):
+        return (self.__class__.__name__ +
+            f'(name={self.name}, type={self.type})')
+    
+    def __repr__(self):
+        return self.__str__()

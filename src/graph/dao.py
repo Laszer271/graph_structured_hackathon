@@ -1,3 +1,4 @@
+from typing import List
 from neo4j import GraphDatabase
 
 from embeddings.openai_embeddings import EmbeddingsProcessor
@@ -5,6 +6,30 @@ from .schema import DocumentSchema, FolderSchema, ChunkSchema, EntitySchema
 
 from dotenv import load_dotenv
 load_dotenv()
+
+
+def _process_node(record):
+    rec_dict = dict(record)
+    if "embedding" in rec_dict:
+        del rec_dict["embedding"]
+
+    return {
+        "elem_id": record.element_id,
+        "node_type": list(record.labels)[0],
+        **rec_dict
+    }
+
+
+def _process_node_with_name(record, record_name):
+    rec = record[record_name]
+    return _process_node(rec)
+
+def _process_edge(record):
+    return {
+        "elem_id": record.element_id,
+        "edge_type": record.type,
+        **dict(record)
+    }
 
 
 class BaseDAO:
@@ -149,11 +174,29 @@ class DocumentDAO(BaseDAO):
                                       folder_name,
                                       folder_path)
 
-        
+
 class ChunkDAO(BaseDAO):
     def __init__(self, uri, username, password, embeddings_processor=None):
         super().__init__(uri, username, password)
         self.embeddings_processor = embeddings_processor
+        self.create_index_if_not_exists()
+
+    @staticmethod
+    def _create_index_if_not_exists(tx):
+        tx.run("""
+            CREATE VECTOR INDEX chunk_embeddings IF NOT EXISTS
+            FOR (c:Chunk)
+            ON c.embedding
+            OPTIONS {indexConfig: {
+            `vector.dimensions`: 1536,
+            `vector.similarity_function`: 'cosine'
+            }}
+            """
+        )
+
+    def create_index_if_not_exists(self):
+        with self.driver.session() as session:
+            session.execute_write(ChunkDAO._create_index_if_not_exists)
 
     def _add_chunk(self, tx, chunk: ChunkSchema):
         if not chunk.embedding:
@@ -172,14 +215,14 @@ class ChunkDAO(BaseDAO):
 
     def _get_chunk_by_id(self, tx, id):
         result = tx.run("MATCH (a:Chunk {id: $id}) RETURN a", id=id)
-        return [record["a"] for record in result]
+        return [_process_node_with_name(record, "a") for record in result]
     
     def _get_chunk_by_document(self, tx, document: DocumentSchema):
         result = tx.run("""
             MATCH (d:Document {name: $name, path: $path})-[:CONTAINS_CHUNK]->(a:Chunk)
             RETURN a
             """, name=document.name, path=document.path)
-        return [record["a"] for record in result]
+        return [_process_node_with_name(record, "a") for record in result]
     
     def _get_chunk_by_document_and_page(self, tx, document: DocumentSchema, page):
         result = tx.run("""
@@ -187,7 +230,7 @@ class ChunkDAO(BaseDAO):
             WHERE a.page = $page
             RETURN a
             """, name=document.name, path=document.path, page=page)
-        return [record["a"] for record in result]
+        return [_process_node_with_name(record, "a") for record in result]
     
     def _get_chunk_by_document_and_chunk_nr(self, tx, document: DocumentSchema, chunk_nr):
         result = tx.run("""
@@ -195,18 +238,119 @@ class ChunkDAO(BaseDAO):
             WHERE a.chunk_nr = $chunk_nr
             RETURN a
             """, name=document.name, path=document.path, chunk_nr=chunk_nr)
-        return [record["a"] for record in result]
+        return [_process_node_with_name(record, "a") for record in result]
     
-    def _get_chunk_by_query(self, tx, query, num_results=1):
+    # def _get_chunk_by_query(self, tx, query, num_results=1, depth=0):
+    #     embedding = self.embeddings_processor.get_embedding(query)
+        
+    #     base_query = """
+    #         CALL db.index.vector.queryNodes(
+    #             'chunk_embeddings',
+    #             $num_results,
+    #             $embedding
+    #         ) YIELD node
+    #         WITH collect(node) AS nodes
+    #     """
+        
+    #     if depth > 0:
+    #         assert isinstance(depth, int), 'Unsafe depth value, depth value must be an integer'
+    #         base_query += f"""
+    #         WITH nodes
+    #         UNWIND nodes AS n
+    #         MATCH (n)-[r*1..{depth}]-(m)
+    #         RETURN collect(distinct n) + collect(distinct m) AS nodes, collect(distinct r) AS relationships
+    #         """
+    #     else:
+    #         base_query += """
+    #         RETURN nodes, [] AS relationships
+    #         """
+        
+    #     print(base_query)
+        
+    #     result = tx.run(base_query, num_results=num_results, embedding=embedding)
+
+    #     nodes = []
+    #     relationships = []
+    #     for record in result:
+    #         print('----- RECORD -----')
+    #         print([r['relationships'] for r in record[0]])
+    #         raise
+    #         nodes.extend([_process_node(r) for r in record['nodes']])
+    #         relationships.extend([_process_edge(r) for r in record['relationships']])
+    #     return nodes, relationships
+        # return [res['nodes'] for res in result], [res['relationships'] for res in result]
+
+    @classmethod
+    def _process_relationships(cls, relationships: List):
+        data = []
+        if len(relationships) > 0:
+            for rel in relationships:
+                if isinstance(rel, list):
+                    data.extend(cls._process_relationships(rel))
+                    continue
+                nodes = list(rel.nodes)
+                node1 = _process_node(nodes[0])
+                node2 = _process_node(nodes[1])
+                relationship = _process_edge(rel)
+                data.append({
+                    "node1": node1,
+                    "node2": node2,
+                    "relationship": relationship
+                })
+        return data
+
+    @classmethod
+    def _process_results(cls, results):
+        data = []
+        for record in results:
+            if isinstance(record, list):
+                data.extend([cls._process_results(rec) for rec in record])
+                continue
+            else:
+                node1 = _process_node_with_name(record, 'node')
+
+                relationships = record.get('relationships', [])
+                # secondary_nodes = record.get('nodes', [])
+                # print(secondary_nodes)
+                # raise
+                # if len(relationships) != len(secondary_nodes):
+                #     raise ValueError('Mismatched number of relationships and secondary nodes')
+                data.extend(cls._process_relationships(relationships))
+                
+        return data
+
+        
+
+    def _get_chunk_by_query(self, tx, query, num_results=1, depth=0):
         embedding = self.embeddings_processor.get_embedding(query)
-        result = tx.run("""
+        
+        base_query = """
             CALL db.index.vector.queryNodes(
                 'chunk_embeddings',
                 $num_results,
                 $embedding
-            ) YIELD node RETURN node
-            """, num_results=num_results, embedding=embedding)
-        return [record["node"] for record in result]
+            ) YIELD node
+            WITH node
+        """
+        
+        if depth > 0:
+            assert isinstance(depth, int), 'Unsafe depth value, depth value must be an integer'
+            base_query += f"""
+            MATCH (node)-[r*1..{depth}]-(m)
+            RETURN node, collect(r) as relationships, collect(m) as nodes
+            """
+        else:
+            base_query += """
+            RETURN node, null as r, null as m
+            """
+        
+        print(base_query)
+        
+        result = tx.run(base_query, num_results=num_results, embedding=embedding)
+        data = self._process_results(result)
+        
+        return data
+
     
     def _connect_chunk_to_document(self, tx, chunk: ChunkSchema, document: DocumentSchema):
         tx.run("""
@@ -243,10 +387,17 @@ class ChunkDAO(BaseDAO):
             result = session.execute_read(self._get_chunk_by_document_and_chunk_nr, document, chunk_nr)
             return [ChunkSchema(**record) for record in result]
         
-    def get_chunk_by_query(self, query, num_results=1):
+    # def get_chunk_by_query(self, query, num_results=1, depth=0):
+    #     with self.driver.session() as session:
+    #         result, relationships = session.execute_read(self._get_chunk_by_query, query, num_results, depth)
+    #         # print(result)
+    #         return result, relationships
+    #         # return [ChunkSchema(**record) for record in result], relationships
+
+    def get_chunk_by_query(self, query, num_results=1, depth=0):
         with self.driver.session() as session:
-            result = session.execute_read(self._get_chunk_by_query, query, num_results)
-            return [ChunkSchema(**record) for record in result]
+            data = session.execute_read(self._get_chunk_by_query, query, num_results, depth)
+            return data
         
     def connect_chunk_to_document(self, chunk: ChunkSchema, document: DocumentSchema):
         with self.driver.session() as session:

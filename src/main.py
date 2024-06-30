@@ -1,63 +1,114 @@
 import os
 
 import streamlit as st
+# from streamlit_agraph import agraph
 from neo4j import GraphDatabase
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from test_neo4j_with_vectorstore import get_person_by_embedding
 from embeddings.openai_embeddings import EmbeddingsProcessor
+from graph.dao import ChunkDAO
+from graph.vizualizations import make_graph
 
-emb_processor = EmbeddingsProcessor()
+def _process_node(record, node_name):
+    return {
+        "elem_id": record[node_name].element_id,
+        "type": list(record[node_name].labels)[0],
+        **dict(record[node_name])
+    }
 
-# Neo4j AuraDB connection details
-uri = os.getenv("NEO4J_URI")
-password = os.getenv("NEO4J_KEY")
-username = 'neo4j'
+def _process_edge(record, edge_name):
+    return {
+        "elem_id": record[edge_name].element_id,
+        "type": record[edge_name].type,
+        **dict(record[edge_name])
+    }
 
-st.title("Echo Bot")
+def process_results(result):
+    return [
+        {
+            "node1": _process_node(rec, 'n'),
+            "node2": _process_node(rec, 'm'),
+            "relationship": _process_edge(rec, 'r')
+        }
+        for rec in result
+    ]
 
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+def main():
+    st.set_page_config(page_title="Echo Bot", page_icon="🤖", layout="wide", )
 
-# Display chat messages from history on app rerun
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    # Neo4j AuraDB connection details
+    uri = os.getenv("NEO4J_URI")
+    password = os.getenv("NEO4J_KEY")
+    username = 'neo4j'
 
-# # React to user input
-if prompt := st.chat_input("What is up?"):
-    # Display user message in chat message container
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-# response = f"Echo: {prompt}"
-# # Display assistant response in chat message container
-# with st.chat_message("assistant"):
-#     st.markdown(response)
-# # Add assistant response to chat history
-# st.session_state.messages.append({"role": "assistant", "content": response})
-
-if prompt is not None:
-    emb = emb_processor.get_embedding(prompt)
-
-    # Connect to Neo4j AuraDB
-    driver = GraphDatabase.driver(uri, auth=(username, password))
     emb_processor = EmbeddingsProcessor()
-    with driver.session() as session:
-        nodes = session.execute_read(get_person_by_embedding, emb, 1)
+    chunk_dao = ChunkDAO(uri=uri, username=username, password=password,
+                         embeddings_processor=emb_processor)
 
-    # Close the driver connection
-    driver.close()    # Display assistant response in chat message container
+    st.title("Graph Bot")
+    col_chat, col_viz = st.columns([3, 2])
 
-    with st.chat_message("neo4j"):
-        st.markdown(nodes)
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": nodes})
+    if 'nodes' not in st.session_state:
+        st.session_state['nodes'] = []  
+    if 'relationships' not in st.session_state:
+        st.session_state['relationships'] = []
 
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    
+    # Display chat messages from history on app rerun
+    with col_chat:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        # # React to user input
+        if prompt := st.chat_input("What is up?"):
+            # Display user message in chat message container
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            # Add user message to chat history
+            st.session_state.messages.append({"role": "user", "content": prompt})
+
+        if prompt is not None:
+            # Connect to Neo4j AuraDB
+            driver = GraphDatabase.driver(uri, auth=(username, password))
+
+            # semantic query
+            data = chunk_dao.get_chunk_by_query(prompt, num_results=3, depth=1)
+            nodes = [d['node1'] for d in data] + [d['node2'] for d in data]
+            nodes = list({node['elem_id']: node for node in nodes}.values())
+            relationships = data
+            print('='*50)
+            print(nodes)
+            print('\n\n\n')
+            print(relationships)
+            print('='*50)
+            nodes_str = "\n\n".join([f"--- Chunk {i} ---\n\n" + 
+                                     'Node type: ' + node.get('node_type', 'UnknownType') +
+                                     '\n\nText: ' + node.get('text', f"{node.get('type')}={node.get('name')}")
+                                     for i, node in enumerate(nodes)])
+            st.session_state['nodes'] = nodes
+            st.session_state['relationships'] = relationships
+
+            # Close the driver connection
+            driver.close()    # Display assistant response in chat message container
+
+            with st.chat_message("assistant"):
+                st.markdown(nodes_str)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": nodes_str})
+    with col_viz:
+        st.write("Visualization here")
+        # print('='*50)
+        # print(nodes)
+        # print(relationships)
+        # print('='*50)
+        # return_value = agraph(**make_graph(nodes, relationships))
+        return_value = make_graph(st.session_state['nodes'], st.session_state['relationships'])
+
+if __name__ == '__main__':
+    main()
