@@ -131,8 +131,7 @@ def main():
 
             with chat_container:
                 with st.chat_message("assistant"):
-                    # st.markdown(nodes_str)
-                    stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt, context = nodes_str)
+                    stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt, context=nodes_str)
                     if (type(stream) == str):
                         response = st.write(stream)
                     else:

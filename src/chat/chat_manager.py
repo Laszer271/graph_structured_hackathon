@@ -95,9 +95,9 @@ class ChatManager:
             return self._repair_guard(response.choices[0].message.content)
 
     
-    def query_model(self, messages_history:list, prompt:str, context:str):
+    def query_model(self, messages_history: list, prompt: str, context: str):
         messages_history = [{"role": m["role"], "content": m["content"]} for m in messages_history] if len(messages_history) > 0 else []
-        system_message = [({"role": "system", "content":chat_prompt.format(context="CONTEXT", history="HISTORIA")})]
+        system_message = [({"role": "system", "content": chat_prompt.format(context=context, history=messages_history)})]
         input_messages = [({"role": "user", "content": prompt})]
 
         #Guard if context is completely irrevelant
