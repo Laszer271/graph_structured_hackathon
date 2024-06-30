@@ -23,7 +23,6 @@ class GraphData:
         self.types_to_colors = dict()
 
     def add_node(self, node: Dict):
-        print('>>> Node:', node)
         if node['elem_id'] in self.nodes_ids:
             return
         
@@ -89,7 +88,7 @@ def _get_all_nodes(tx):
         for rec in result
       ]
 
-def make_graph(nodes, relationships):
+def make_graph(nodes, relationships=None):
     config = Config(width=1500,
                     height=1000,
                     directed=True, 
@@ -103,18 +102,13 @@ def make_graph(nodes, relationships):
         graph.add_node(node=node)
 
     for rel in relationships:
+        if rel['node1'] is None or rel['node2'] is None:
+            continue
         source_id = rel['node1']['elem_id']
         target_id = rel['node2']['elem_id']
         graph.add_edge(source_id=source_id, target_id=target_id, relationship=rel['relationship'])
 
-    # print('/////////////// Nodes:', len(graph.get_nodes()))
-    # return {
-    #     "nodes": graph.get_nodes(),
-    #     "edges": graph.get_edges(),
-    #     "config": config
-    # }
-
-    return agraph(
+    return dict(
         nodes=graph.get_nodes(), 
         edges=graph.get_edges(), 
         config=config
