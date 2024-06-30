@@ -40,6 +40,8 @@ def process_results(result):
     ]
 
 def main():
+    print('='*50)
+    print('REFRESHED')
     st.set_page_config(page_title="Echo Bot", page_icon="🤖", layout="wide", )
 
     # Neo4j AuraDB connection details
@@ -59,6 +61,8 @@ def main():
 
     st.title("Graph Bot")
     col_chat, col_viz = st.columns([3, 2])
+    chat_container = col_chat.container()
+    prompt = col_chat.chat_input("Ask a question to your documents")
 
     if 'nodes' not in st.session_state:
         st.session_state['nodes'] = []  
@@ -75,16 +79,20 @@ def main():
 
     # Display chat messages from history on app rerun
     with col_chat:
-        st.subheader("Chat")
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+        with chat_container:
+            st.subheader("Chat")
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
-        # # React to user input
-        if prompt := st.chat_input("Ask a question to your documents"):
+        # React to user input
+        print('CREATING CHAT INPUT')
+        if prompt:
+            print('CHAT INPUT USED')
             # Display user message in chat message container
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            with chat_container:
+                with st.chat_message("user"):
+                    st.markdown(prompt)
 
             # Add user message to chat messages and sliding history
             st.session_state.messages.append({"role": "user", "content": prompt})
@@ -121,14 +129,14 @@ def main():
             elif where_to_go == "ERROR":
                 nodes_str = ""
 
-            with st.chat_message("assistant"):
-                # st.markdown(nodes_str)
-
-                stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt, context = nodes_str)
-                if (type(stream) == str):
-                    response = st.write(stream)
-                else:
-                    response = st.write_stream(stream)
+            with chat_container:
+                with st.chat_message("assistant"):
+                    # st.markdown(nodes_str)
+                    stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt, context = nodes_str)
+                    if (type(stream) == str):
+                        response = st.write(stream)
+                    else:
+                        response = st.write_stream(stream)
 
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.session_state.window_history.append({"role": "user", "content": response})
@@ -136,13 +144,17 @@ def main():
             # MANAGING WINDOW HISTORY
             window_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.window_history] if len(st.session_state.window_history) > 0 else []
             new_window_history = chat_manager.manage_history(window_history)
-            print("HISTORY: ", st.session_state.window_history, "\n")
+            # print("HISTORY: ", st.session_state.window_history, "\n")
             st.session_state.window_history = new_window_history
-            print("HISTORY PO ZMIANIE: ", st.session_state.window_history)
+            # print("HISTORY PO ZMIANIE: ", st.session_state.window_history)
 
             # Add assistant response to chat history
             # st.session_state.messages.append({"role": "assistant", "content": nodes_str})
+        else:
+            print('prompt is None')
+
     with col_viz:
+        print('creating graph')
         st.subheader("Graph Vizualization")
         graph_data = make_graph(
             st.session_state['nodes'], st.session_state['relationships']
