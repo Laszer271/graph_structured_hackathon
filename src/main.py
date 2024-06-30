@@ -3,6 +3,7 @@ import os
 import streamlit as st
 # from streamlit_agraph import agraph
 from neo4j import GraphDatabase
+from openai import OpenAI
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,6 +11,7 @@ load_dotenv()
 from embeddings.openai_embeddings import EmbeddingsProcessor
 from graph.dao import ChunkDAO
 from graph.vizualizations import make_graph
+from chat.chat_manager import ChatManager
 
 def _process_node(record, node_name):
     return {
@@ -43,6 +45,12 @@ def main():
     password = os.getenv("NEO4J_KEY")
     username = 'neo4j'
 
+    # Set up OpenAI client
+    ai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if "openai_model" not in st.session_state:
+        st.session_state["openai_model"] = "gpt-3.5-turbo"
+    chat_manager = ChatManager(client=ai_client, model=st.session_state["openai_model"])
+
     emb_processor = EmbeddingsProcessor()
     chunk_dao = ChunkDAO(uri=uri, username=username, password=password,
                          embeddings_processor=emb_processor)
@@ -55,9 +63,13 @@ def main():
     if 'relationships' not in st.session_state:
         st.session_state['relationships'] = []
 
-    # Initialize chat history
+    # Initialize chat messages
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    
+    # Initialize chat window_history
+    if "window_history" not in st.session_state:
+        st.session_state.window_history = []
 
     # Display chat messages from history on app rerun
     with col_chat:
@@ -70,8 +82,10 @@ def main():
             # Display user message in chat message container
             with st.chat_message("user"):
                 st.markdown(prompt)
-            # Add user message to chat history
+
+            # Add user message to chat messages and sliding history
             st.session_state.messages.append({"role": "user", "content": prompt})
+            st.session_state.window_history.append({"role": "user", "content": prompt})
 
         if prompt is not None:
             # Connect to Neo4j AuraDB
@@ -98,9 +112,23 @@ def main():
             driver.close()    # Display assistant response in chat message container
 
             with st.chat_message("assistant"):
-                st.markdown(nodes_str)
+                # st.markdown(nodes_str)
+
+                stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt)
+                response = st.write_stream(stream)
+
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.window_history.append({"role": "user", "content": response})
+
+            # MANAGING WINDOW HISTORY
+            window_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.window_history] if len(st.session_state.window_history) > 0 else []
+            new_window_history = chat_manager.manage_history(window_history)
+            print("HISTORY: ", st.session_state.window_history, "\n")
+            st.session_state.window_history = new_window_history
+            print("HISTORY PO ZMIANIE: ", st.session_state.window_history)
+
             # Add assistant response to chat history
-            st.session_state.messages.append({"role": "assistant", "content": nodes_str})
+            # st.session_state.messages.append({"role": "assistant", "content": nodes_str})
     with col_viz:
         st.subheader("Graph Vizualization")
         # print('='*50)
