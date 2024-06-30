@@ -1,7 +1,7 @@
 import os
 
 import streamlit as st
-# from streamlit_agraph import agraph
+from streamlit_agraph import agraph
 from neo4j import GraphDatabase
 from openai import OpenAI
 
@@ -11,6 +11,8 @@ load_dotenv()
 from embeddings.openai_embeddings import EmbeddingsProcessor
 from graph.dao import ChunkDAO
 from graph.vizualizations import make_graph
+
+from streamlit_agraph import agraph, Node, Edge, Config
 from chat.chat_manager import ChatManager
 
 def _process_node(record, node_name):
@@ -73,12 +75,13 @@ def main():
 
     # Display chat messages from history on app rerun
     with col_chat:
+        st.subheader("Chat")
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
         # # React to user input
-        if prompt := st.chat_input("What is up?"):
+        if prompt := st.chat_input("Ask a question to your documents"):
             # Display user message in chat message container
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -93,14 +96,10 @@ def main():
 
             # semantic query
             data = chunk_dao.get_chunk_by_query(prompt, num_results=3, depth=1)
-            nodes = [d['node1'] for d in data] + [d['node2'] for d in data]
+            nodes = [d['node1'] for d in data if d['node1'] is not None] +\
+                [d['node2'] for d in data if d['node2'] is not None]
             nodes = list({node['elem_id']: node for node in nodes}.values())
             relationships = data
-            print('='*50)
-            print(nodes)
-            print('\n\n\n')
-            print(relationships)
-            print('='*50)
             nodes_str = "\n\n".join([f"--- Chunk {i} ---\n\n" + 
                                      'Node type: ' + node.get('node_type', 'UnknownType') +
                                      '\n\nText: ' + node.get('text', f"{node.get('type')}={node.get('name')}")
@@ -131,13 +130,13 @@ def main():
             # st.session_state.messages.append({"role": "assistant", "content": nodes_str})
     with col_viz:
         st.subheader("Graph Vizualization")
-        # print('='*50)
-        # print(nodes)
-        # print(relationships)
-        # print('='*50)
-        # return_value = agraph(**make_graph(nodes, relationships))
-        st.write(f'Got {len(st.session_state["nodes"])} nodes and {len(st.session_state["relationships"])} relationships')
-        return_value = make_graph(st.session_state['nodes'], st.session_state['relationships'])
+        graph_data = make_graph(
+            st.session_state['nodes'], st.session_state['relationships']
+        )
+        st.write(f'Got {len(graph_data["nodes"])} nodes and {len(graph_data["edges"])} relationships')
+
+        agraph(**graph_data)
+
 
 if __name__ == '__main__':
     main()

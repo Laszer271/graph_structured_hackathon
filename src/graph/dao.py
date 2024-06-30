@@ -310,13 +310,14 @@ class ChunkDAO(BaseDAO):
                 node1 = _process_node_with_name(record, 'node')
 
                 relationships = record.get('relationships', [])
-                # secondary_nodes = record.get('nodes', [])
-                # print(secondary_nodes)
-                # raise
-                # if len(relationships) != len(secondary_nodes):
-                #     raise ValueError('Mismatched number of relationships and secondary nodes')
-                data.extend(cls._process_relationships(relationships))
-                
+                if len(relationships) > 0:
+                    data.extend(cls._process_relationships(relationships))
+                else:
+                    data.append({
+                        "node1": node1,
+                        "node2": None,
+                        "relationship": None
+                    })
         return data
 
         
@@ -343,8 +344,6 @@ class ChunkDAO(BaseDAO):
             base_query += """
             RETURN node, null as r, null as m
             """
-        
-        print(base_query)
         
         result = tx.run(base_query, num_results=num_results, embedding=embedding)
         data = self._process_results(result)
