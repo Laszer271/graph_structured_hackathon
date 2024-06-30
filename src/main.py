@@ -102,12 +102,13 @@ def main():
             # Add assistant response to chat history
             st.session_state.messages.append({"role": "assistant", "content": nodes_str})
     with col_viz:
-        st.write("Visualization here")
+        st.subheader("Graph Vizualization")
         # print('='*50)
         # print(nodes)
         # print(relationships)
         # print('='*50)
         # return_value = agraph(**make_graph(nodes, relationships))
+        st.write(f'Got {len(st.session_state["nodes"])} nodes and {len(st.session_state["relationships"])} relationships')
         return_value = make_graph(st.session_state['nodes'], st.session_state['relationships'])
 
 if __name__ == '__main__':
