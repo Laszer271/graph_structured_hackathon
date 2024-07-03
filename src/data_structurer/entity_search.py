@@ -61,7 +61,8 @@ class BertEntitySearcher(EntitySearcher):
 class GLiNEREntitySearcher(EntitySearcher):
     def __init__(self, language="en") -> None:
         self.model = GLiNER.from_pretrained("EmergentMethods/gliner_medium_news-v2.1")
-        self.labels = ["osoba", "miejsce", "data", "wydarzenie", "obiekt", "pojazd", "numer", "organizacja", "jedzenie"] if language=="pl" else ["person", "location", "date", "event", "facility", "vehicle", "number", "organization", "food"]
+        self.labels = ["osoba", "miejsce", "data", "wydarzenie", "obiekt", "pojazd", "numer", "organizacja", "jedzenie"] if language=="pl" else \
+            ["person", "location", "date", "event", "facility", "vehicle", "organization", "construction material", "technique", "norm", "product", "citation", "legal reference"]
 
     def search_entities(self, input: str):
         entities = self.model.predict_entities(input, self.labels)

@@ -11,9 +11,10 @@ load_dotenv()
 
 
 class ChatManager:
-    def __init__(self,client: OpenAI,model:str) -> None:
+    def __init__(self,client: OpenAI,model:str, stream=False) -> None:
         self.client = client
         self.model = model
+        self.stream = stream
 
     def _repair_router(content):
         # Define a regex pattern to find the exact word
@@ -97,19 +98,27 @@ class ChatManager:
     
     def query_model(self, messages_history: list, prompt: str, context: str):
         messages_history = [{"role": m["role"], "content": m["content"]} for m in messages_history] if len(messages_history) > 0 else []
-        system_message = [({"role": "system", "content": chat_prompt.format(context=context, history=messages_history)})]
+        system_message = [({"role": "system", "content": chat_prompt.format(context=context)})]
         input_messages = [({"role": "user", "content": prompt})]
 
         #Guard if context is completely irrevelant
         do_continue = self._pseudo_guard(context=context, query=prompt)
 
         if do_continue == "CONTINUE":
-            stream = self.client.chat.completions.create(
-                model = self.model,
-                messages = system_message + input_messages,
-                stream = True
-            )
-            return stream
+            if self.stream:
+                stream = self.client.chat.completions.create(
+                    model = self.model,
+                    messages = system_message + messages_history + input_messages,
+                    stream=True
+                )
+                return stream
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=system_message + messages_history + input_messages,
+                    stream=False
+                )
+                return response.choices[0].message.content
     
         elif do_continue == "STOP":
             return "I have no informations about this topic. Please ask about other topics."

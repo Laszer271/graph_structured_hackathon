@@ -52,7 +52,7 @@ def main():
     # Set up OpenAI client
     ai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     if "openai_model" not in st.session_state:
-        st.session_state["openai_model"] = "gpt-3.5-turbo"
+        st.session_state["openai_model"] = "gpt-4o"
     chat_manager = ChatManager(client=ai_client, model=st.session_state["openai_model"])
 
     emb_processor = EmbeddingsProcessor()
@@ -101,13 +101,14 @@ def main():
         if prompt is not None:
           
             #TODO: Here should be router
-            where_to_go = chat_manager.router(st.session_state.window_history, prompt)
+            # where_to_go = chat_manager.router(st.session_state.window_history, prompt)
+            where_to_go = "SEARCH"
 
             if where_to_go == "SEARCH":
                 # Connect to Neo4j AuraDB
                 driver = GraphDatabase.driver(uri, auth=(username, password))
                 # semantic query
-                data = chunk_dao.get_chunk_by_query(prompt, num_results=3, depth=1)
+                data = chunk_dao.get_chunk_by_query(prompt, num_results=8, depth=1)
                 nodes = [d['node1'] for d in data if d['node1'] is not None] +\
                     [d['node2'] for d in data if d['node2'] is not None]
                 nodes = list({node['elem_id']: node for node in nodes}.values())
@@ -122,23 +123,26 @@ def main():
                 # Close the driver connection
                 driver.close()    # Display assistant response in chat message container
 
-            elif where_to_go == "CONVERSATION":
-                nodes_str = ""
-            elif where_to_go == "STOP":
-                nodes_str = ""
-            elif where_to_go == "ERROR":
-                nodes_str = ""
+            # elif where_to_go == "CONVERSATION":
+            #     nodes_str = ""
+            # elif where_to_go == "STOP":
+            #     nodes_str = ""
+            # elif where_to_go == "ERROR":
+            #     nodes_str = ""
 
             with chat_container:
                 with st.chat_message("assistant"):
                     stream = chat_manager.query_model(messages_history=st.session_state.window_history, prompt=prompt, context=nodes_str)
-                    if (type(stream) == str):
-                        response = st.write(stream)
+                    if isinstance(stream, str):
+                        response = stream
+                        st.write(response)
                     else:
                         response = st.write_stream(stream)
 
+            print('--- ADDING RESPONSE TO CHAT ---')
+            print(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
-            st.session_state.window_history.append({"role": "user", "content": response})
+            st.session_state.window_history.append({"role": "assistant", "content": response})
 
             # MANAGING WINDOW HISTORY
             window_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.window_history] if len(st.session_state.window_history) > 0 else []

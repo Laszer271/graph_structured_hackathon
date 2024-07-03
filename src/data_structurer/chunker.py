@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append('..')
+
 from semantic_chunkers import StatisticalChunker,ConsecutiveChunker
 from semantic_router.encoders import OpenAIEncoder
 
