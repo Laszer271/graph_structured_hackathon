@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  ocr4all:
+    image: uniwuezpd/ocr4all
+    container_name: ocr4all
+    ports:
+      - "1476:8080"
+    volumes:
+      - ./data:/var/ocr4all/data
+      - ./models:/var/ocr4all/models/custom
+    tty: true
+  fastapi-service:
+    build: .
+    container_name: fastapi-service
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
