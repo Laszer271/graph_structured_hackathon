@@ -90,9 +90,9 @@ if __name__ == '__main__':
     username = 'neo4j'
 
     data = load_data('../data')
-    describer = OpenAIDescriber(openai_api_key=os.getenv('OPENAI_API_KEY'), model='gpt-4o')
+    describer = OpenAIDescriber(openai_api_key=os.getenv('OPENAI_API_KEY'), model='gpt-4o-mini')
     descriptions = describe_images(data, describer, 'desc_backup.csv')
-    print(descriptions)
+
     data = pd.concat([data, descriptions], axis=1)
 
     emb_processor = EmbeddingsProcessor()
